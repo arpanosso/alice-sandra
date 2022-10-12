@@ -21,6 +21,182 @@ knitr::opts_chunk$set(
 ```{r}
 library(tidyverse)
 library(agricolae)
+library(emmeans)
+library(lattice)
+library(desplot)
 library(MASS)
+library(lme4)
+```
+
+## Pressuposição da análise de variância
+
+### Entrada de dados para o objeto `dba`
+```{r}
+dba <- read.table("data/altura1920.txt",header=T)
+```
+
+
+```{r}
+glimpse(dba)
+DBA <- dba %>% 
+  mutate_at(vars(bloco, trat), as_factor)
+glimpse(DBA)
+```
+
+
+
+```{r}
+DBA %>% sample_n(150) %>% # amostrando somente uns 150
+  ggplot(
+       aes(y = prod,
+           x = trat,
+           color = trat,
+           shape = bloco)) +
+  geom_point(size = 2) + # scatter plot with larger dots
+  ylim(0, NA) + # force y-axis to start at 0
+  guides(color = "none") + # turn off legend for colors
+  theme_classic() + # clearer plot format
+  theme(legend.position = "top",
+        axis.text.x = element_text(angle = 90)) # legend on top
+```
+
+
+
+## Anova
+
+```{r}
+bloco <- factor(DBA$bloco)
+trat <- factor(DBA$trat)
+yield <- DBA$prod
+```
+
+## Delineamento em blocos aumentados
+### Análise intrablocos via `agricolae::DAU.test`
+
+```{r}
+model <- DAU.test(bloco, trat, yield,
+                  method = "tukey",
+                  console=TRUE)
+```
+
+# Médias ajustadas
+
+```{r}
+model$means
+```
+
+## Análise intrablocos via `lm` ou `aov`
+
+```{r}
+lm_DBA <- lm(prod ~ bloco + trat, data = DBA)
+anova(lm_DBA)
+```
+
+## Análise intrablocos das testemunhas
+
+```{r}
+lmt_DBA <- lm(prod ~ bloco + trat, data=DBA %>% 
+                filter(tipo == "teste")
+              )
+anova(lmt_DBA)
+```
+
+## Adaptado da Tese do João Batista Duarte (Prof. UFG)
+### Análise intrablocos com a decomposição de 
+
+$$
+trat = TR + teste + TR\text{ vs } teste
+$$
+
+### variáveis auxiliares
+
+```{r}
+DBA <- DBA %>% 
+  mutate(
+    C = as_factor(ifelse(tipo == "TR", 0, trat)),
+    X = as_factor(ifelse(tipo == "teste", 0, trat))
+  )
+```
+
+```{r}
+DBA %>% tibble()
+```
+
+
+```{r}
+lm1_dba <- lm(
+  terms(prod ~ bloco + C + X %in% C, keep.order = TRUE), 
+  data = DBA,
+  contrasts = list(
+    C = contr.sum,
+    X = contr.sum,
+    bloco = contr.sum)
+  )
+anova(lm1_dba)
+```
+
+## refere-se a saida da função `DAU.test` - ANOVA2
+
+```{r}
+lm2_dba <- lm(
+  terms(prod ~ C + X %in% C + bloco, keep.order = TRUE), 
+  data = DBA, 
+  contrasts = list(
+    C = contr.sum,
+    X = contr.sum,
+    bloco = contr.sum))
+anova(lm2_dba)
+```
+
+## Ambos $tr$ e $tc$ aleatórios
+
+```{r}
+lmer_dba <- lmer(prod ~ bloco + (1|trat) , data=DBA)
+summary(lmer_dba)
+```
+
+# Solution for Random Effects
+```{r}
+as.data.frame(ranef(lmer_dba))
+```
+
+## VALOR GENOTÍPICO = (DEP=ESTIMATE) + MÉDIA GERAL
+```{r}
+ranef(lmer_dba)$trat + mean(DBA %>%  pull(prod)) 
+```
+
+## Help Julio Bueno - SEP of BLUPs via `lme4`
+
+```{r}
+blups <- ranef(lmer_dba, condVar = TRUE, drop=TRUE)
+blups_trat <- blups$trat
+blups_PEV <- attr(blups_trat,"postVar")
+blups_SEP <- sqrt(blups_PEV)
+t_blups <- blups_trat/blups_SEP # estatística t
+tibble(blups_trat,blups_SEP,t_blups)
+```
+
+## To produce a (list of) "caterpillar plots" of the random effects
+
+```{r}
+blups <- ranef(lmer_dba, condVar = TRUE) #usando o argumento drop n?o plotou
+dotplot(blups)
+```
+
+## tr aleatorios e tc fixos
+
+```{r}
+DBA <- DBA %>% 
+  mutate(
+    X1 = as_factor(ifelse(tipo == "TR",1,0))
+  )
+head(DBA)
+```
+
+
+```{r}
+lmer_dba1 <- lmer(prod ~ bloco + C + (1|trat:X1) , data=DBA)
+summary(lmer_dba1)
+ranef(lmer_dba1)
 ```
 
