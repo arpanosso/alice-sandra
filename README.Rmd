@@ -1,0 +1,26 @@
+---
+output: github_document
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  message = FALSE,
+  warning = FALSE,
+  error = FALSE
+)
+```
+
+# Análise de Blocos aumentados
+
+## Carregando os Pacotes
+
+```{r}
+library(tidyverse)
+library(agricolae)
+library(MASS)
+```
+
